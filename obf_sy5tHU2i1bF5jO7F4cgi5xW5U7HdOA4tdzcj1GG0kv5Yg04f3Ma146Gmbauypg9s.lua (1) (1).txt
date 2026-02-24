@@ -1,1 +1,296 @@
 
+-- ╔══════════════════════════════════════╗
+-- ║        FlyESP_Module.lua             ║
+-- ║  Hospede isso em algum lugar e use   ║
+-- ║  o loadstring no Main.lua            ║
+-- ╚══════════════════════════════════════╝
+
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+
+-- Garante que o State existe
+State = State or {}
+State.Player = State.Player or {}
+State.Player.FlyValue = State.Player.FlyValue or 1
+State.Player.FlyEnabled = State.Player.FlyEnabled or false
+State.Player.FlyMobileEnabled = State.Player.FlyMobileEnabled or false
+
+local bv, bg
+local flyInitialized = false
+local mobileFlyInitialized = false
+
+-- ┌─────────────────────────────────────┐
+-- │           FUNÇÃO: FLY               │
+-- └─────────────────────────────────────┘
+function ActivateFly(state)
+    State.Player.FlyEnabled = state
+
+    local char = player.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hrp or not hum then return end
+
+    if state then
+        if getgenv().FlyConnection then
+            getgenv().FlyConnection:Disconnect()
+            getgenv().FlyConnection = nil
+        end
+        if bg then bg:Destroy() bg = nil end
+        if bv then bv:Destroy() bv = nil end
+
+        bg = Instance.new("BodyGyro")
+        bg.P = 9e4
+        bg.maxTorque = Vector3.new(9e9, 9e9, 9e9)
+        bg.cframe = hrp.CFrame
+        bg.Parent = hrp
+
+        bv = Instance.new("BodyVelocity")
+        bv.velocity = Vector3.new(0, 0, 0)
+        bv.maxForce = Vector3.new(9e9, 9e9, 9e9)
+        bv.Parent = hrp
+
+        getgenv().FlyConnection = RunService.RenderStepped:Connect(function()
+            if not State.Player.FlyEnabled then return end
+            if not char or not char.Parent then return end
+            if not hrp or not hrp.Parent then return end
+
+            hum.PlatformStand = true
+
+            local moveDirection = Vector3.new(0, 0, 0)
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDirection += Vector3.new(0, 0, 1) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDirection += Vector3.new(0, 0, -1) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDirection += Vector3.new(-1, 0, 0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDirection += Vector3.new(1, 0, 0) end
+
+            local vertical = 0
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then vertical = 1
+            elseif UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then vertical = -1 end
+
+            local camera = workspace.CurrentCamera
+            local lookVector = camera.CFrame.LookVector
+            local rightVector = camera.CFrame.RightVector
+
+            local velocityVector = Vector3.new(0, 0, 0)
+            if moveDirection.Magnitude > 0 then
+                velocityVector = (rightVector * moveDirection.X) + (lookVector * moveDirection.Z)
+            end
+
+            if bv and bv.Parent then
+                if moveDirection.Magnitude == 0 and vertical == 0 then
+                    bv.velocity = Vector3.new(0, 0.1, 0)
+                else
+                    bv.velocity = (velocityVector + Vector3.new(0, vertical, 0)).Unit * (State.Player.FlyValue * 50)
+                end
+            end
+
+            if bg and bg.Parent then
+                bg.cframe = camera.CFrame
+            end
+        end)
+
+        if flyInitialized then
+            Notify({ Title = "🕊️ Fly Ativado", Content = "Velocidade: " .. State.Player.FlyValue, Duration = 3 })
+        end
+    else
+        if getgenv().FlyConnection then
+            getgenv().FlyConnection:Disconnect()
+            getgenv().FlyConnection = nil
+        end
+        if bg and bg.Parent then bg:Destroy() end bg = nil
+        if bv and bv.Parent then bv:Destroy() end bv = nil
+        if hum then hum.PlatformStand = false end
+        if hrp then
+            hrp.Velocity = Vector3.new(0, 0, 0)
+            hrp.RotVelocity = Vector3.new(0, 0, 0)
+        end
+
+        if flyInitialized then
+            Notify({ Title = "🚫 Fly Desativado", Content = "Voo desligado", Duration = 3 })
+        end
+    end
+
+    flyInitialized = true
+end
+
+-- ┌─────────────────────────────────────┐
+-- │        FUNÇÃO: MOBILE FLY           │
+-- └─────────────────────────────────────┘
+function ActivateMobileFly(state)
+    State.Player.FlyMobileEnabled = state
+
+    local char = player.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    local camera = workspace.CurrentCamera
+    if not hrp or not hum then return end
+
+    if state then
+        if getgenv().FlyMobileConnection then
+            getgenv().FlyMobileConnection:Disconnect()
+            getgenv().FlyMobileConnection = nil
+        end
+        for _, obj in pairs(hrp:GetChildren()) do
+            if obj:IsA("BodyGyro") or obj:IsA("BodyVelocity") then obj:Destroy() end
+        end
+
+        local bgm = Instance.new("BodyGyro")
+        bgm.P = 9e4
+        bgm.maxTorque = Vector3.new(9e9, 9e9, 9e9)
+        bgm.cframe = hrp.CFrame
+        bgm.Name = "MobileFlyGyro"
+        bgm.Parent = hrp
+
+        local bvm = Instance.new("BodyVelocity")
+        bvm.velocity = Vector3.new(0, 0, 0)
+        bvm.maxForce = Vector3.new(9e9, 9e9, 9e9)
+        bvm.Name = "MobileFlyVelocity"
+        bvm.Parent = hrp
+
+        getgenv().FlyMobileConnection = RunService.RenderStepped:Connect(function()
+            if not State.Player.FlyMobileEnabled then return end
+            if not char or not char.Parent then return end
+            if not hrp or not hrp.Parent then return end
+            if not bgm or not bgm.Parent then return end
+            if not bvm or not bvm.Parent then return end
+
+            hum.PlatformStand = true
+
+            if hum.MoveDirection.Magnitude > 0 then
+                bvm.velocity = camera.CFrame.LookVector * (State.Player.FlyValue * 50)
+            else
+                bvm.velocity = Vector3.new(0, 0.1, 0)
+            end
+            bgm.cframe = camera.CFrame
+        end)
+
+        if mobileFlyInitialized then
+            Notify({ Title = "📱 Mobile Fly Ativado", Content = "Use o analógico e a câmera", Duration = 3 })
+        end
+    else
+        if getgenv().FlyMobileConnection then
+            getgenv().FlyMobileConnection:Disconnect()
+            getgenv().FlyMobileConnection = nil
+        end
+        for _, obj in pairs(hrp:GetChildren()) do
+            if obj:IsA("BodyGyro") or obj:IsA("BodyVelocity") then obj:Destroy() end
+        end
+        if hum then hum.PlatformStand = false end
+        if hrp then
+            hrp.Velocity = Vector3.new(0, 0, 0)
+            hrp.RotVelocity = Vector3.new(0, 0, 0)
+        end
+
+        if mobileFlyInitialized then
+            Notify({ Title = "🚫 Mobile Fly Desativado", Content = "Voo desligado", Duration = 3 })
+        end
+    end
+
+    mobileFlyInitialized = true
+end
+
+-- ┌─────────────────────────────────────┐
+-- │           FUNÇÃO: ESP               │
+-- └─────────────────────────────────────┘
+_G.ESP_Enabled = false
+
+function ActivateESP(state)
+    _G.ESP_Enabled = state
+    local localPlayer = Players.LocalPlayer
+
+    local function removeESP(character)
+        if character:FindFirstChild("ESPHighlight") then character.ESPHighlight:Destroy() end
+        local hrp = character:FindFirstChild("HumanoidRootPart")
+        local head = character:FindFirstChild("Head")
+        if hrp and hrp:FindFirstChild("ESPBox") then hrp.ESPBox:Destroy() end
+        if head and head:FindFirstChild("PlayerESP") then head.PlayerESP:Destroy() end
+    end
+
+    if not _G.ESP_Enabled then
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p.Character then removeESP(p.Character) end
+        end
+        return
+    end
+
+    local function setupCharacter(targetPlayer, character)
+        if not _G.ESP_Enabled or targetPlayer == localPlayer then return end
+
+        local head = character:WaitForChild("Head", 10)
+        local humanoid = character:WaitForChild("Humanoid", 10)
+        local hrp = character:WaitForChild("HumanoidRootPart", 10)
+        if not head or not humanoid or not hrp then return end
+
+        removeESP(character)
+
+        local highlight = Instance.new("Highlight", character)
+        highlight.Name = "ESPHighlight"
+        highlight.FillTransparency = 0.6
+        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+
+        local box = Instance.new("BoxHandleAdornment", hrp)
+        box.Name = "ESPBox"
+        box.Size = Vector3.new(4, 6, 1)
+        box.AlwaysOnTop = true
+        box.Adornee = hrp
+        box.Transparency = 0.7
+
+        local billboard = Instance.new("BillboardGui", head)
+        billboard.Name = "PlayerESP"
+        billboard.Size = UDim2.new(0, 180, 0, 50)
+        billboard.StudsOffset = Vector3.new(0, 3, 0)
+        billboard.AlwaysOnTop = true
+
+        local frame = Instance.new("Frame", billboard)
+        frame.Size = UDim2.new(1, 0, 1, 0)
+        frame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+        frame.BackgroundTransparency = 0.4
+        Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 6)
+        local uiStroke = Instance.new("UIStroke", frame)
+
+        local nameLabel = Instance.new("TextLabel", frame)
+        nameLabel.Size = UDim2.new(1, 0, 0.5, 0)
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.TextColor3 = Color3.new(1, 1, 1)
+        nameLabel.Font = Enum.Font.GothamBold
+        nameLabel.TextSize = 14
+        nameLabel.Text = targetPlayer.Name
+
+        local infoLabel = Instance.new("TextLabel", frame)
+        infoLabel.Size = UDim2.new(1, 0, 0.4, 0)
+        infoLabel.Position = UDim2.new(0, 0, 0.5, 0)
+        infoLabel.BackgroundTransparency = 1
+        infoLabel.Font = Enum.Font.Gotham
+        infoLabel.TextSize = 12
+
+        local conn
+        conn = RunService.RenderStepped:Connect(function()
+            if not _G.ESP_Enabled or not character.Parent then
+                removeESP(character)
+                conn:Disconnect()
+                return
+            end
+            if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                local dist = math.floor((hrp.Position - localPlayer.Character.HumanoidRootPart.Position).Magnitude)
+                local hpPercent = humanoid.Health / humanoid.MaxHealth
+                local color = Color3.fromHSV(hpPercent * 0.3, 1, 1)
+
+                uiStroke.Color = color
+                highlight.FillColor = color
+                box.Color3 = color
+                infoLabel.TextColor3 = color
+                infoLabel.Text = string.format("%d HP | %d studs", math.floor(humanoid.Health), dist)
+            end
+        end)
+    end
+
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p.Character then task.spawn(setupCharacter, p, p.Character) end
+        p.CharacterAdded:Connect(function(c) setupCharacter(p, c) end)
+    end
+end
+
+print("✅ FlyESP_Module carregado com sucesso!")
