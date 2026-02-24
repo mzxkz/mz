@@ -1,4 +1,3 @@
-
 -- ╔══════════════════════════════════════╗
 -- ║        FlyESP_Module.lua             ║
 -- ║  Hospede isso em algum lugar e use   ║
@@ -18,8 +17,9 @@ State.Player.FlyEnabled = State.Player.FlyEnabled or false
 State.Player.FlyMobileEnabled = State.Player.FlyMobileEnabled or false
 
 local bv, bg
-local flyInitialized = false
-local mobileFlyInitialized = false
+-- FIX: flags iniciam como true para notificar desde a primeira ativação
+local flyInitialized = true
+local mobileFlyInitialized = true
 
 -- ┌─────────────────────────────────────┐
 -- │           FUNÇÃO: FLY               │
@@ -38,8 +38,9 @@ function ActivateFly(state)
             getgenv().FlyConnection:Disconnect()
             getgenv().FlyConnection = nil
         end
-        if bg then bg:Destroy() bg = nil end
-        if bv then bv:Destroy() bv = nil end
+        -- FIX: destruição e nil dentro do mesmo bloco, garantido
+        if bg then bg:Destroy(); bg = nil end
+        if bv then bv:Destroy(); bv = nil end
 
         bg = Instance.new("BodyGyro")
         bg.P = 9e4
@@ -99,8 +100,12 @@ function ActivateFly(state)
             getgenv().FlyConnection:Disconnect()
             getgenv().FlyConnection = nil
         end
-        if bg and bg.Parent then bg:Destroy() end bg = nil
-        if bv and bv.Parent then bv:Destroy() end bv = nil
+        -- FIX: nil garantido dentro do próprio if
+        if bg and bg.Parent then bg:Destroy() end
+        bg = nil
+        if bv and bv.Parent then bv:Destroy() end
+        bv = nil
+
         if hum then hum.PlatformStand = false end
         if hrp then
             hrp.Velocity = Vector3.new(0, 0, 0)
@@ -111,8 +116,6 @@ function ActivateFly(state)
             Notify({ Title = "🚫 Fly Desativado", Content = "Voo desligado", Duration = 3 })
         end
     end
-
-    flyInitialized = true
 end
 
 -- ┌─────────────────────────────────────┐
@@ -159,8 +162,14 @@ function ActivateMobileFly(state)
 
             hum.PlatformStand = true
 
-            if hum.MoveDirection.Magnitude > 0 then
-                bvm.velocity = camera.CFrame.LookVector * (State.Player.FlyValue * 50)
+            -- FIX: suporte a subida/descida no mobile via Jump e LeftShift virtuais
+            local vertical = 0
+            if UserInputService:IsKeyDown(Enum.KeyCode.ButtonA) then vertical = 1
+            elseif UserInputService:IsKeyDown(Enum.KeyCode.ButtonX) then vertical = -1 end
+
+            if hum.MoveDirection.Magnitude > 0 or vertical ~= 0 then
+                local baseVel = camera.CFrame.LookVector * (State.Player.FlyValue * 50)
+                bvm.velocity = baseVel + Vector3.new(0, vertical * (State.Player.FlyValue * 50), 0)
             else
                 bvm.velocity = Vector3.new(0, 0.1, 0)
             end
@@ -188,8 +197,6 @@ function ActivateMobileFly(state)
             Notify({ Title = "🚫 Mobile Fly Desativado", Content = "Voo desligado", Duration = 3 })
         end
     end
-
-    mobileFlyInitialized = true
 end
 
 -- ┌─────────────────────────────────────┐
@@ -197,19 +204,37 @@ end
 -- └─────────────────────────────────────┘
 _G.ESP_Enabled = false
 
+-- FIX: guarda conexões do CharacterAdded para poder desconectar depois
+local espCharConnections = {}
+-- FIX: guarda conexões do RenderStepped por personagem para limpeza garantida
+local espRenderConnections = {}
+
+local function removeESP(character)
+    if character:FindFirstChild("ESPHighlight") then character.ESPHighlight:Destroy() end
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    local head = character:FindFirstChild("Head")
+    if hrp and hrp:FindFirstChild("ESPBox") then hrp.ESPBox:Destroy() end
+    if head and head:FindFirstChild("PlayerESP") then head.PlayerESP:Destroy() end
+
+    -- FIX: desconecta o RenderStepped do personagem ao remover ESP
+    local key = tostring(character)
+    if espRenderConnections[key] then
+        espRenderConnections[key]:Disconnect()
+        espRenderConnections[key] = nil
+    end
+end
+
 function ActivateESP(state)
     _G.ESP_Enabled = state
     local localPlayer = Players.LocalPlayer
 
-    local function removeESP(character)
-        if character:FindFirstChild("ESPHighlight") then character.ESPHighlight:Destroy() end
-        local hrp = character:FindFirstChild("HumanoidRootPart")
-        local head = character:FindFirstChild("Head")
-        if hrp and hrp:FindFirstChild("ESPBox") then hrp.ESPBox:Destroy() end
-        if head and head:FindFirstChild("PlayerESP") then head.PlayerESP:Destroy() end
-    end
-
     if not _G.ESP_Enabled then
+        -- FIX: desconecta todos os CharacterAdded acumulados
+        for _, conn in pairs(espCharConnections) do
+            conn:Disconnect()
+        end
+        espCharConnections = {}
+
         for _, p in ipairs(Players:GetPlayers()) do
             if p.Character then removeESP(p.Character) end
         end
@@ -266,11 +291,12 @@ function ActivateESP(state)
         infoLabel.Font = Enum.Font.Gotham
         infoLabel.TextSize = 12
 
+        -- FIX: salva a conexão indexada pelo personagem para poder desconectar
+        local charKey = tostring(character)
         local conn
         conn = RunService.RenderStepped:Connect(function()
             if not _G.ESP_Enabled or not character.Parent then
                 removeESP(character)
-                conn:Disconnect()
                 return
             end
             if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
@@ -285,11 +311,17 @@ function ActivateESP(state)
                 infoLabel.Text = string.format("%d HP | %d studs", math.floor(humanoid.Health), dist)
             end
         end)
+        espRenderConnections[charKey] = conn
     end
 
     for _, p in ipairs(Players:GetPlayers()) do
         if p.Character then task.spawn(setupCharacter, p, p.Character) end
-        p.CharacterAdded:Connect(function(c) setupCharacter(p, c) end)
+
+        -- FIX: salva a conexão do CharacterAdded para desconectar ao desativar ESP
+        local charConn = p.CharacterAdded:Connect(function(c)
+            setupCharacter(p, c)
+        end)
+        table.insert(espCharConnections, charConn)
     end
 end
 
