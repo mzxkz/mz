@@ -698,7 +698,11 @@ end
 
 function p.UpdateTheme(r,u,v,x,z,A)
 local function ApplyTheme(B)
-if not B.Object or not B.Object.Parent then
+if not B.Object then
+return
+end
+local ok,destroyed=pcall(function()return B.Object.Parent end)
+if not ok then
 p.Objects[B.Object]=nil
 return
 end
@@ -719,6 +723,8 @@ x or 0.2,
 z or Enum.EasingStyle.Quint,
 A or Enum.EasingDirection.Out
 ):Play()
+elseif u then
+p.Tween(B.Object,0.08,{[C]=G}):Play()
 else
 B.Object[C]=G
 end
@@ -749,6 +755,8 @@ x or 0.2,
 z or Enum.EasingStyle.Quint,
 A or Enum.EasingDirection.Out
 ):Play()
+elseif u then
+p.Tween(B.Object,0.08,{[C]=G}):Play()
 else
 B.Object[C]=G
 end
