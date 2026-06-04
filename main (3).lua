@@ -375,9 +375,18 @@ local l
 if d:IsStudio()or not writefile then
 l=a.load'a'
 else
-l=loadstring(
-game.HttpGetAsync and game:HttpGetAsync(j)or h:GetAsync(j)
-)()
+-- [OPT] Cache de ícones em disco: evita HTTP toda execução
+local _iconCachePath="WindUI/_icons_cache.lua"
+local _iconSrc
+if isfile(_iconCachePath)then
+_iconSrc=readfile(_iconCachePath)
+else
+_iconSrc=game.HttpGetAsync and game:HttpGetAsync(j)or h:GetAsync(j)
+if _iconSrc and#_iconSrc>0 then
+pcall(writefile,_iconCachePath,_iconSrc)
+end
+end
+l=loadstring(_iconSrc)()
 end
 
 l.SetIconsType"lucide"
@@ -502,9 +511,11 @@ return v
 end
 
 function p.DisconnectAll()
-for r,u in next,p.Signals do
-local v=table.remove(p.Signals,r)
-v:Disconnect()
+-- [OPT] Itera de trás pra frente para evitar problema de índice ao remover
+for r=#p.Signals,1,-1 do
+local v=p.Signals[r]
+if v then pcall(function()v:Disconnect()end)end
+p.Signals[r]=nil
 end
 end
 
@@ -574,6 +585,9 @@ end
 function p.SetTheme(r)
 local u=p.Theme
 p.Theme=r
+-- [OPT] Invalida cache de propriedades ao trocar tema
+_themePropCache={}
+_themePropCacheTheme=r
 p.UpdateTheme(nil,false)
 
 for v,x in next,p.ThemeChangeCallbacks do
@@ -593,7 +607,22 @@ v.FontFace=Font.new(r,v.FontFace.Weight,v.FontFace.Style)
 end
 end
 
+-- [OPT] Cache de propriedades de tema: evita recalcular o mesmo valor centenas de vezes por UpdateTheme
+local _themePropCache={}
+local _themePropCacheTheme=nil
+
 function p.GetThemeProperty(r,u)
+-- Invalida cache se o tema mudou
+if u~=_themePropCacheTheme then
+_themePropCache={}
+_themePropCacheTheme=u
+end
+
+local _cacheKey=r
+if _themePropCache[_cacheKey]~=nil then
+return _themePropCache[_cacheKey]
+end
+
 local function getValue(v,x)
 local z=x[v]
 
@@ -629,9 +658,11 @@ if v~=nil then
 if typeof(v)=="string"and string.sub(v,1,1)~="#"then
 local x=p.GetThemeProperty(v,u)
 if x~=nil then
+_themePropCache[_cacheKey]=x
 return x
 end
 else
+_themePropCache[_cacheKey]=v
 return v
 end
 end
@@ -639,9 +670,13 @@ end
 local x=p.ThemeFallbacks[r]
 if x~=nil then
 if typeof(x)=="string"and string.sub(x,1,1)~="#"then
-return p.GetThemeProperty(x,u)
+local _res=p.GetThemeProperty(x,u)
+_themePropCache[_cacheKey]=_res
+return _res
 else
-return getValue(r,{[r]=x})
+local _res=getValue(r,{[r]=x})
+_themePropCache[_cacheKey]=_res
+return _res
 end
 end
 
@@ -650,21 +685,28 @@ if v~=nil then
 if typeof(v)=="string"and string.sub(v,1,1)~="#"then
 local z=p.GetThemeProperty(v,p.Themes.Dark)
 if z~=nil then
+_themePropCache[_cacheKey]=z
 return z
 end
 else
+_themePropCache[_cacheKey]=v
 return v
 end
 end
 
 if x~=nil then
 if typeof(x)=="string"and string.sub(x,1,1)~="#"then
-return p.GetThemeProperty(x,p.Themes.Dark)
+local _res=p.GetThemeProperty(x,p.Themes.Dark)
+_themePropCache[_cacheKey]=_res
+return _res
 else
-return getValue(r,{[r]=x})
+local _res=getValue(r,{[r]=x})
+_themePropCache[_cacheKey]=_res
+return _res
 end
 end
 
+_themePropCache[_cacheKey]=false -- sentinela: nil não funciona como cache
 return nil
 end
 
@@ -776,9 +818,17 @@ if B then
 ApplyTheme(B)
 end
 else
+-- [OPT] Limpa objetos destruídos antes de iterar, reduz tabela ao longo do tempo
+local _dead={}
 for B,C in pairs(p.Objects)do
+local _ok=pcall(function()return C.Object.Parent end)
+if not _ok then
+_dead[B]=true
+else
 ApplyTheme(C)
 end
+end
+for B in pairs(_dead)do p.Objects[B]=nil end
 end
 end
 
@@ -901,8 +951,18 @@ end
 return x
 end
 
+-- [OPT] Cache dos TweenInfo mais usados para evitar alocação repetida
+local _tweenCache={}
+local function _getTweenInfo(u,...)
+local _key=u..table.concat({...},",")
+if not _tweenCache[_key]then
+_tweenCache[_key]=TweenInfo.new(u,...)
+end
+return _tweenCache[_key]
+end
+
 function p.Tween(r,u,v,...)
-return f:Create(r,TweenInfo.new(u,...),v)
+return f:Create(r,_getTweenInfo(u,...),v)
 end
 
 function p.NewRoundFrame(r,u,v,x,z,A)
@@ -14029,7 +14089,10 @@ aa.Transparent=aw.Transparent
 aa.Window=b
 
 if aw.Acrylic then
+-- [OPT] Inicializa Acrylic de forma adiada para não travar o carregamento da janela
+task.defer(function()
 aq.init()
+end)
 end
 
 
