@@ -211,7 +211,7 @@ m.ImageColor3=h[1].Color
 m.ImageTransparency=i[1].Value or nil
 m.Image=l and j or j[1]
 m.ImageRectSize=l and nil or j[2].ImageRectSize
-m.ImageRectOffset=l and nil or j[2].ImageRectPosition
+m.ImageRectPosition=l and nil or j[2].ImageRectPosition
 
 
 if not l and j[2].Parts then
@@ -225,7 +225,7 @@ v.ImageColor3=h[1+p].Color
 v.ImageTransparency=i[1+p].Value or nil
 v.Image=u[1]
 v.ImageRectSize=u[2].ImageRectSize
-v.ImageRectOffset=u[2].ImageRectPosition
+v.ImageRectPosition=u[2].ImageRectPosition
 v.Parent=m
 end
 end
