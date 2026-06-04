@@ -3103,7 +3103,13 @@ end
 
 local function handleSuccess(aA)
 al:Close()()
-writefile((ag.Folder or"Temp").."/"..ah..".key",tostring(aA))
+-- [FIX] Garante que a pasta existe antes de salvar a key
+local _keyFolder=ag.Folder or"Temp"
+pcall(function()
+if not isfolder("WindUI")then makefolder("WindUI")end
+if not isfolder(_keyFolder)then makefolder(_keyFolder)end
+writefile(_keyFolder.."/"..ah..".key",tostring(aA))
+end)
 task.wait(0.4)
 ai(true)
 end
