@@ -2766,6 +2766,9 @@ as,
 local av=af("Enter Key","key",nil,"Input",function(av)
 an=av
 end)
+-- [FIX] Guardar referência ao TextBox para ler o valor no momento do Submit
+-- (FocusLost não dispara se o user clicar Submit sem sair do campo)
+local _avInput=av:FindFirstChildWhichIsA("TextBox",true)
 
 local aw
 if ag.KeySystem.Note and ag.KeySystem.Note~=""then
@@ -3115,6 +3118,8 @@ ai(true)
 end
 
 local aA=ae("Submit","arrow-right",function()
+-- [FIX] Lê o texto direto do campo no clique (FocusLost nao dispara ao clicar Submit)
+if _avInput and _avInput.Text~="" then an=_avInput.Text end
 local aA=tostring(an or"empty")local aB=
 ag.Folder or ag.Title
 
@@ -3125,7 +3130,9 @@ if b then
 if ag.KeySystem.SaveKey then
 handleSuccess(aA)
 else
-al:Close()()
+-- [FIX] Close pode retornar nil quando SaveKey=false, crashando silenciosamente
+local _c=al:Close()
+if type(_c)=="function"then pcall(_c)end
 task.wait(0.4)
 ai(true)
 end
@@ -3144,7 +3151,9 @@ if b then
 if ag.KeySystem.SaveKey then
 handleSuccess(aA)
 else
-al:Close()()
+-- [FIX] Close pode retornar nil quando SaveKey=false, crashando silenciosamente
+local _c=al:Close()
+if type(_c)=="function"then pcall(_c)end
 task.wait(0.4)
 ai(true)
 end
