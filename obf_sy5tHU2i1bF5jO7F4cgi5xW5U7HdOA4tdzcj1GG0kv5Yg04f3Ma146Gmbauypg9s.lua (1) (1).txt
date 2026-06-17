@@ -984,19 +984,17 @@ x={v}
 end
 
 local function update(H)
-if not B or not G.CanDraggable then
-return
-end
+    if not B or not G.CanDraggable then
+        return
+    end
 
-local J=H.Position-C
-p.Tween(v,0.02,{
-Position=UDim2.new(
-F.X.Scale,
-F.X.Offset+J.X,
-F.Y.Scale,
-F.Y.Offset+J.Y
-),
-}):Play()
+    local J=H.Position-C
+    v.Position=UDim2.new(
+        F.X.Scale,
+        F.X.Offset+J.X,
+        F.Y.Scale,
+        F.Y.Offset+J.Y
+    )
 end
 
 for H,J in pairs(x)do
@@ -12559,21 +12557,24 @@ v.IconSize
 end
 
 
-
-local u=al.Drag(
-au.UIElements.Main,
-{au.UIElements.Main.Main.Topbar,l.Frame},
-function(u,v)
-if not au.Closed then
-if u and v==l.Frame then
-an(l,0.1,{ImageTransparency=0.35}):Play()
-else
-an(l,0.2,{ImageTransparency=0.8}):Play()
-end
-au.Position=au.UIElements.Main.Position
-au.Dragging=u
-end
-end
+local u = al.Drag(
+    au.UIElements.Main,
+    {au.UIElements.Main.Main.Topbar, l.Frame},
+    function(isDragging, v)
+        -- congela AutomaticSize durante o drag
+        au.UIElements.SideBar.AutomaticCanvasSize = 
+            isDragging and Enum.AutomaticSize.None or Enum.AutomaticSize.Y
+        
+        if not au.Closed then
+            if isDragging and v == l.Frame then
+                an(l, 0.1, {ImageTransparency = 0.35}):Play()
+            else
+                an(l, 0.2, {ImageTransparency = 0.8}):Play()
+            end
+            au.Position = au.UIElements.Main.Position
+            au.Dragging = isDragging
+        end
+    end
 )
 
 if not f and au.Background and typeof(au.Background)=="table"then
